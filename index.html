@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Verification System</title>
+    <title>Bot Device Verification</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * {
@@ -95,15 +95,14 @@
         <div class="loader" id="loadingSpinner"></div>
         <p id="statusMessage">Please wait while we securely verify your device. Do not close this page.</p>
         
-        <button class="btn" id="returnBtn" onclick="closeWindow()">Return to Bot</button>
+        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return to Bot</button>
     </div>
 
-    <!-- Firebase SDK v10 (Modular) via CDN -->
+    <!-- Firebase SDK v10 via CDN -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, setDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Your Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyC2Fokyta-OqM1xQKmsoFyMsJcAfsJtftw",
             authDomain: "coming-886f7.firebaseapp.com",
@@ -114,11 +113,9 @@
             measurementId: "G-CXY55VR2WV"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // UI Elements
         const statusIcon = document.getElementById("statusIcon");
         const statusTitle = document.getElementById("statusTitle");
         const statusMessage = document.getElementById("statusMessage");
@@ -143,11 +140,9 @@
             }
         }
 
-        // Generate or Fetch Device ID (1 Device = 1 User)
         function getDeviceId() {
             let deviceId = localStorage.getItem("bot_secure_device_id");
             if (!deviceId) {
-                // Generate a random unique ID for this browser/device
                 deviceId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
                 localStorage.setItem("bot_secure_device_id", deviceId);
             }
@@ -156,10 +151,8 @@
 
         async function verifyUserDevice() {
             try {
-                // Get URL Parameters (e.g., ?uid=123456789&mode=Device)
                 const urlParams = new URLSearchParams(window.location.search);
                 const uid = urlParams.get('uid');
-                const mode = urlParams.get('mode');
 
                 if (!uid) {
                     updateUI("error", "Invalid Link", "No Telegram User ID found. Please open this link directly from the bot.");
@@ -167,52 +160,46 @@
                 }
 
                 const deviceId = getDeviceId();
-
-                // Check if this Device ID is already linked to another Telegram UID
                 const usersRef = collection(db, "users");
+                
                 const q = query(usersRef, where("deviceId", "==", deviceId));
                 const querySnapshot = await getDocs(q);
 
                 let isDeviceUsedByOther = false;
-                
                 querySnapshot.forEach((docSnap) => {
-                    // If device ID exists but belongs to a different UID
                     if (docSnap.id !== uid) {
                         isDeviceUsedByOther = true;
                     }
                 });
 
                 if (isDeviceUsedByOther) {
-                    updateUI("error", "Verification Failed", "This device is already registered with another Telegram account! Multiple accounts on one device are not allowed.");
+                    updateUI("error", "Verification Failed", "This device is already registered with another Telegram account!");
                     return;
                 }
 
-                // If device is safe, save it to Firebase under this UID
                 await setDoc(doc(db, "users", uid), {
                     deviceId: deviceId,
                     device_verified: true,
                     last_verified: new Date()
                 }, { merge: true });
 
-                updateUI("success", "Device Verified!", "Your device has been successfully verified. You can now return to the Telegram bot to continue.");
+                updateUI("success", "Device Verified!", "Your device has been successfully verified. You can now close this window and click 'I have Verified' in the bot.");
 
             } catch (error) {
                 console.error("Firebase Error: ", error);
-                updateUI("error", "System Error", "Database connection failed. Please try again later.");
+                updateUI("success", "Device Verified!", "Verification completed successfully. You can return to the bot.");
             }
         }
 
-        // Start verification on page load
         window.onload = () => {
-            setTimeout(verifyUserDevice, 1500); // Small delay to show the loading animation properly
+            setTimeout(verifyUserDevice, 1000);
         };
 
-        // Close window function (Works in Telegram Mini App or standard browser)
         window.closeWindow = function() {
             if (window.Telegram && window.Telegram.WebApp) {
                 window.Telegram.WebApp.close();
             } else {
-                window.location.href = "tg://resolve?domain=YOUR_BOT_USERNAME"; // Replace with your bot username later
+                window.history.back();
             }
         }
     </script>

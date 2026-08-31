@@ -6,201 +6,63 @@
     <title>Bot Device Verification</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-        }
-        body {
-            background-color: #0f172a;
-            color: #ffffff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            text-align: center;
-        }
-        .container {
-            background: #1e293b;
-            padding: 40px 30px;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            max-width: 400px;
-            width: 90%;
-            border-top: 4px solid #38bdf8;
-        }
-        .icon {
-            font-size: 50px;
-            margin-bottom: 15px;
-        }
-        h2 {
-            font-size: 24px;
-            font-weight: 800;
-            margin-bottom: 10px;
-            color: #f8fafc;
-        }
-        p {
-            font-size: 14px;
-            color: #94a3b8;
-            margin-bottom: 25px;
-            line-height: 1.5;
-        }
-        .loader {
-            border: 4px solid #334155;
-            border-top: 4px solid #38bdf8;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .btn {
-            display: none;
-            background: #10b981;
-            color: #ffffff;
-            text-decoration: none;
-            padding: 12px 25px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 15px;
-            transition: 0.3s;
-            cursor: pointer;
-            border: none;
-            width: 100%;
-        }
-        .btn:hover {
-            background: #059669;
-        }
-        .error-text {
-            color: #ef4444;
-            font-weight: 600;
-        }
-        .success-text {
-            color: #10b981;
-            font-weight: 600;
-        }
+        body { background-color: #0f172a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; font-family: 'Poppins', sans-serif; }
+        .container { background: #1e293b; padding: 40px 30px; border-radius: 16px; width: 90%; max-width: 400px; border-top: 4px solid #38bdf8; }
+        .icon { font-size: 50px; margin-bottom: 15px; }
+        h2 { font-size: 24px; font-weight: 800; color: #f8fafc; }
+        p { color: #94a3b8; margin: 10px 0 20px; font-size: 14px; }
+        .btn { display: none; background: #10b981; color: #fff; padding: 12px; border-radius: 8px; width: 100%; border: none; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <div class="icon" id="statusIcon">⏳</div>
         <h2 id="statusTitle">Verifying Device...</h2>
-        
-        <div class="loader" id="loadingSpinner"></div>
-        <p id="statusMessage">Please wait while we securely verify your device. Do not close this page.</p>
-        
-        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return to Bot</button>
+        <p id="statusMessage">Please wait while we securely verify your device.</p>
+        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return</button>
     </div>
 
-    <!-- Firebase SDK v10 via CDN -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2Fokyta-OqM1xQKmsoFyMsJcAfsJtftw",
             authDomain: "coming-886f7.firebaseapp.com",
-            projectId: "coming-886f7",
-            storageBucket: "coming-886f7.firebasestorage.app",
-            messagingSenderId: "750181985724",
-            appId: "1:750181985724:web:9ea95bd47645e54d774fb9",
-            measurementId: "G-CXY55VR2WV"
+            projectId: "coming-886f7"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        const statusIcon = document.getElementById("statusIcon");
-        const statusTitle = document.getElementById("statusTitle");
-        const statusMessage = document.getElementById("statusMessage");
-        const loadingSpinner = document.getElementById("loadingSpinner");
-        const returnBtn = document.getElementById("returnBtn");
-
-        function updateUI(status, title, message) {
-            loadingSpinner.style.display = "none";
-            returnBtn.style.display = "block";
-            
-            if (status === "success") {
-                statusIcon.innerText = "✅";
-                statusTitle.innerText = title;
-                statusTitle.className = "success-text";
-                statusMessage.innerText = message;
-            } else {
-                statusIcon.innerText = "❌";
-                statusTitle.innerText = title;
-                statusTitle.className = "error-text";
-                statusMessage.innerText = message;
-                returnBtn.style.background = "#334155";
-            }
-        }
-
-        function getDeviceId() {
-            let deviceId = localStorage.getItem("bot_secure_device_id");
-            if (!deviceId) {
-                deviceId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-                localStorage.setItem("bot_secure_device_id", deviceId);
-            }
-            return deviceId;
-        }
-
         async function verifyUserDevice() {
+            const uid = new URLSearchParams(window.location.search).get('uid');
+            if (!uid) return;
+
+            let deviceId = localStorage.getItem("bot_secure_device_id") || ('dev_' + Date.now().toString(36));
+            localStorage.setItem("bot_secure_device_id", deviceId);
+
             try {
-                const urlParams = new URLSearchParams(window.location.search);
-                const uid = urlParams.get('uid');
-
-                if (!uid) {
-                    updateUI("error", "Invalid Link", "No Telegram User ID found. Please open this link directly from the bot.");
-                    return;
-                }
-
-                const deviceId = getDeviceId();
-                const usersRef = collection(db, "users");
-                
-                const q = query(usersRef, where("deviceId", "==", deviceId));
-                const querySnapshot = await getDocs(q);
-
-                let isDeviceUsedByOther = false;
-                querySnapshot.forEach((docSnap) => {
-                    if (docSnap.id !== uid) {
-                        isDeviceUsedByOther = true;
-                    }
-                });
-
-                if (isDeviceUsedByOther) {
-                    updateUI("error", "Verification Failed", "This device is already registered with another Telegram account!");
-                    return;
-                }
-
                 await setDoc(doc(db, "users", uid), {
                     deviceId: deviceId,
                     device_verified: true,
-                    last_verified: new Date()
+                    timestamp: new Date()
                 }, { merge: true });
 
-                updateUI("success", "Device Verified!", "Your device has been successfully verified. You can now close this window and click 'I have Verified' in the bot.");
-
-            } catch (error) {
-                console.error("Firebase Error: ", error);
-                updateUI("success", "Device Verified!", "Verification completed successfully. You can return to the bot.");
+                document.getElementById("statusIcon").innerText = "✅";
+                document.getElementById("statusTitle").innerText = "Device Verified!";
+                document.getElementById("statusTitle").style.color = "#10b981";
+                document.getElementById("statusMessage").innerText = "You can now close this window and click 'I have Verified' in the bot.";
+                document.getElementById("returnBtn").style.display = "block";
+            } catch (e) {
+                alert("Error connecting to database. Make sure rules are set to true.");
             }
         }
-
-        window.onload = () => {
-            setTimeout(verifyUserDevice, 1000);
-        };
+        setTimeout(verifyUserDevice, 1000);
 
         window.closeWindow = function() {
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.close();
-            } else {
-                window.history.back();
-            }
+            if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.close();
+            else window.history.back();
         }
     </script>
 </body>

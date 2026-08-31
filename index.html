@@ -5,20 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Verification</title>
     <style>
-        /* VIP Stylish CSS */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .card { background: #1e293b; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; position: relative; overflow: hidden; }
-        
-        /* Top glowing line */
         .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #00f2fe, #4facfe); }
-        
-        /* Circular Timer */
         .circle { width: 100px; height: 100px; border-radius: 50%; border: 5px solid #38bdf8; display: flex; justify-content: center; align-items: center; font-size: 45px; font-weight: bold; margin: 0 auto 20px auto; color: #38bdf8; box-shadow: 0 0 25px rgba(56, 189, 248, 0.5); transition: all 0.5s ease; }
-        
         h2 { margin: 0 0 10px 0; font-size: 24px; color: #f8fafc; }
         p { color: #94a3b8; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
-        
-        /* Stylish Button */
         .btn { display: none; background: linear-gradient(90deg, #10b981, #059669); color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transition: 0.3s; }
         .btn:hover { transform: scale(1.05); }
     </style>
@@ -27,7 +19,7 @@
     <div class="card">
         <div class="circle" id="countdown">5</div>
         <h2 id="title">Verifying Device...</h2>
-        <p id="desc">Please wait, establishing a secure connection to the database...</p>
+        <p id="desc">Checking device security and preventing multiple accounts...</p>
         <button class="btn" id="closeBtn" onclick="closeApp()">✅ Return to Bot</button>
     </div>
 
@@ -35,32 +27,83 @@
         let apiSuccess = false;
         let errorMsg = "";
 
-        // 1. API Call in Background
         async function runVerification() {
             const uid = new URLSearchParams(window.location.search).get('uid');
             if (!uid) { errorMsg = "UID Missing! Open from Bot."; return; }
 
-            let deviceId = localStorage.getItem("bot_device_id") || ('dev_' + Date.now());
-            localStorage.setItem("bot_device_id", deviceId);
+            // 1. Get or Generate Device ID
+            let deviceId = localStorage.getItem("bot_device_id");
+            if (!deviceId) {
+                deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem("bot_device_id", deviceId);
+            }
 
-            const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=timestamp`;
-            
-            const payload = {
-                fields: {
-                    deviceId: { stringValue: deviceId },
-                    device_verified: { booleanValue: true },
-                    timestamp: { timestampValue: new Date().toISOString() }
+            // 2. ANTI-CHEAT: Check if this Device ID is already used by another UID
+            const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
+            const queryPayload = {
+                structuredQuery: {
+                    from: [{ collectionId: "users" }],
+                    where: {
+                        fieldFilter: {
+                            field: { fieldPath: "deviceId" },
+                            op: "EQUAL",
+                            value: { stringValue: deviceId }
+                        }
+                    }
                 }
             };
 
             try {
-                let response = await fetch(firestoreUrl, {
+                let checkRes = await fetch(queryUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(queryPayload)
+                });
+                
+                let checkData = await checkRes.json();
+                let isUsedByOther = false;
+                
+                // Read the database response to see if another account is linked
+                if (checkData && checkData.length > 0 && checkData[0].document) {
+                    for (let item of checkData) {
+                        if (item.document && item.document.name) {
+                            let docName = item.document.name;
+                            let existingUid = docName.split('/').pop();
+                            if (existingUid !== uid) {
+                                isUsedByOther = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (isUsedByOther) {
+                    errorMsg = "Multiple Accounts Detected! This device is banned.";
+                    return; // Stops here, completely blocks the user!
+                }
+
+                // 3. SAFE: Save Verification if the device is clean
+                const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=timestamp`;
+                const payload = {
+                    fields: {
+                        deviceId: { stringValue: deviceId },
+                        device_verified: { booleanValue: true },
+                        timestamp: { timestampValue: new Date().toISOString() }
+                    }
+                };
+
+                let updateRes = await fetch(firestoreUrl, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                if (response.ok) apiSuccess = true;
-                else errorMsg = "Database locked. Check Rules!";
+
+                if (updateRes.ok) {
+                    apiSuccess = true;
+                } else {
+                    errorMsg = "Database error. Please try again.";
+                }
+
             } catch (e) {
                 errorMsg = "Network Error!";
             }
@@ -68,7 +111,6 @@
 
         runVerification();
 
-        // 2. Stylish 5-Second Countdown
         let timeLeft = 5;
         let timer = setInterval(() => {
             timeLeft--;
@@ -80,7 +122,6 @@
             }
         }, 1000);
 
-        // 3. Show Result after 5 seconds
         function showFinalResult() {
             let circle = document.getElementById("countdown");
             let title = document.getElementById("title");
@@ -94,6 +135,7 @@
                 circle.style.boxShadow = "0 0 25px rgba(16, 185, 129, 0.6)";
                 title.innerText = "Verification Successful!";
                 desc.innerText = "Your device has been verified securely. You can now return to the bot.";
+                btn.style.background = "linear-gradient(90deg, #10b981, #059669)";
             } else {
                 circle.innerText = "✖";
                 circle.style.borderColor = "#ef4444";
@@ -101,14 +143,17 @@
                 circle.style.boxShadow = "0 0 25px rgba(239, 68, 68, 0.6)";
                 title.innerText = "Verification Failed!";
                 desc.innerText = errorMsg;
+                btn.style.background = "linear-gradient(90deg, #ef4444, #b91c1c)";
+                btn.innerText = "❌ Close Window";
             }
             btn.style.display = "block";
         }
 
-        // 4. Close Mini App Function
         function closeApp() {
             if (window.Telegram && window.Telegram.WebApp) {
                 window.Telegram.WebApp.close();
+            } else {
+                window.close();
             }
         }
     </script>

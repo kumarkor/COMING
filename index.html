@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Device Verification</title>
+    <title>Secure Verification</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
@@ -21,68 +21,78 @@
         <div class="icon" id="statusIcon">⏳</div>
         <h2 id="statusTitle">Verifying Device...</h2>
         <p id="statusMessage">Please wait while we securely verify your device.</p>
-        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return</button>
+        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return to Bot</button>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyC2Fokyta-OqM1xQKmsoFyMsJcAfsJtftw",
-            authDomain: "coming-886f7.firebaseapp.com",
-            projectId: "coming-886f7",
-            storageBucket: "coming-886f7.firebasestorage.app",
-            messagingSenderId: "750181985724",
-            appId: "1:750181985724:web:9ea95bd47645e54d774fb9",
-            measurementId: "G-CXY55VR2WV"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
+    <script>
         async function verifyUserDevice() {
-            let urlParams = new URLSearchParams(window.location.search);
-            // URL मधून uid घेईल किंवा थेट तुझा Admin ID वापरेल
-            let uid = urlParams.get('uid') || "7335163273";
+            // Get UID from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const uid = urlParams.get('uid');
 
+            if (!uid) {
+                document.getElementById("statusIcon").innerText = "❌";
+                document.getElementById("statusTitle").innerText = "Error!";
+                document.getElementById("statusMessage").innerText = "User ID missing. Open from Bot.";
+                return;
+            }
+
+            // Create or get unique Device ID
             let deviceId = localStorage.getItem("bot_secure_device_id");
             if (!deviceId) {
-                deviceId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
                 localStorage.setItem("bot_secure_device_id", deviceId);
             }
 
-            try {
-                await setDoc(doc(db, "users", String(uid)), {
-                    deviceId: deviceId,
-                    device_verified: true,
-                    timestamp: new Date().toISOString()
-                }, { merge: true });
+            // Superfast REST API directly to your Firestore Database
+            const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=timestamp`;
+            
+            const payload = {
+                fields: {
+                    deviceId: { stringValue: deviceId },
+                    device_verified: { booleanValue: true },
+                    timestamp: { timestampValue: new Date().toISOString() }
+                }
+            };
 
-                document.getElementById("statusIcon").innerText = "✅";
-                document.getElementById("statusTitle").innerText = "Device Verified!";
-                document.getElementById("statusTitle").style.color = "#10b981";
-                document.getElementById("statusMessage").innerText = "Your device has been verified. You can now close this window and continue.";
-                document.getElementById("returnBtn").style.display = "block";
+            try {
+                let response = await fetch(firestoreUrl, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    // Success UI
+                    document.getElementById("statusIcon").innerText = "✅";
+                    document.getElementById("statusTitle").innerText = "Device Verified!";
+                    document.getElementById("statusTitle").style.color = "#10b981";
+                    document.getElementById("statusMessage").innerText = "Success! You can now close this window and click 'I have Verified' in the bot.";
+                    document.getElementById("returnBtn").style.display = "block";
+                } else {
+                    throw new Error("API Error");
+                }
             } catch (e) {
-                console.error(e);
                 document.getElementById("statusIcon").innerText = "❌";
                 document.getElementById("statusTitle").innerText = "Verification Failed";
                 document.getElementById("statusTitle").style.color = "#ef4444";
-                document.getElementById("statusMessage").innerText = "Database write error. Check Firestore rules.";
+                document.getElementById("statusMessage").innerText = "Database error. Please try again.";
                 document.getElementById("returnBtn").style.display = "block";
             }
         }
 
-        setTimeout(verifyUserDevice, 800);
+        // Run instantly
+        setTimeout(verifyUserDevice, 500);
 
-        window.closeWindow = function() {
+        // Close App Function
+        function closeWindow() {
             if (window.Telegram && window.Telegram.WebApp) {
                 window.Telegram.WebApp.close();
             } else {
-                window.history.back();
+                window.close();
             }
         }
     </script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </body>
 </html>

@@ -20,15 +20,14 @@
     <div class="container">
         <div class="icon" id="statusIcon">⏳</div>
         <h2 id="statusTitle">Verifying Device...</h2>
-        <p id="statusMessage">Please wait while we securely verify your device. Do not close this page.</p>
-        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return to Bot</button>
+        <p id="statusMessage">Please wait while we securely verify your device.</p>
+        <button class="btn" id="returnBtn" onclick="closeWindow()">Close & Return</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // तुझी संपूर्ण Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyC2Fokyta-OqM1xQKmsoFyMsJcAfsJtftw",
             authDomain: "coming-886f7.firebaseapp.com",
@@ -43,13 +42,10 @@
         const db = getFirestore(app);
 
         async function verifyUserDevice() {
-            const uid = new URLSearchParams(window.location.search).get('uid');
-            if (!uid) {
-                showError("Invalid Link! Please open from the bot.");
-                return;
-            }
+            let urlParams = new URLSearchParams(window.location.search);
+            // URL मधून uid घेईल किंवा थेट तुझा Admin ID वापरेल
+            let uid = urlParams.get('uid') || "7335163273";
 
-            // १ डिव्हाइससाठी १ कायमस्वरूपी ID बनवणे
             let deviceId = localStorage.getItem("bot_secure_device_id");
             if (!deviceId) {
                 deviceId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -57,54 +53,28 @@
             }
 
             try {
-                // चेक करणे: हा मोबाईल दुसऱ्या कोणाच्या टेलिग्राम आयडीला जोडला आहे का?
-                const usersRef = collection(db, "users");
-                const q = query(usersRef, where("deviceId", "==", deviceId));
-                const querySnapshot = await getDocs(q);
-
-                let isUsedByOther = false;
-                querySnapshot.forEach((docSnap) => {
-                    if (docSnap.id !== uid) {
-                        isUsedByOther = true;
-                    }
-                });
-
-                if (isUsedByOther) {
-                    showError("This device is already registered with another account!");
-                    return;
-                }
-
-                // जर सर्व ठीक असेल, तर डेटाबेसमध्ये सेव्ह करणे
-                await setDoc(doc(db, "users", uid), {
+                await setDoc(doc(db, "users", String(uid)), {
                     deviceId: deviceId,
                     device_verified: true,
                     timestamp: new Date().toISOString()
                 }, { merge: true });
 
-                // सक्सेस मेसेज दाखवणे
                 document.getElementById("statusIcon").innerText = "✅";
                 document.getElementById("statusTitle").innerText = "Device Verified!";
                 document.getElementById("statusTitle").style.color = "#10b981";
-                document.getElementById("statusMessage").innerText = "Your device has been verified. You can now close this window and click 'I have Verified' in the bot.";
+                document.getElementById("statusMessage").innerText = "Your device has been verified. You can now close this window and continue.";
                 document.getElementById("returnBtn").style.display = "block";
-
             } catch (e) {
                 console.error(e);
-                showError("Database Error! Make sure Firestore rules are set to true.");
+                document.getElementById("statusIcon").innerText = "❌";
+                document.getElementById("statusTitle").innerText = "Verification Failed";
+                document.getElementById("statusTitle").style.color = "#ef4444";
+                document.getElementById("statusMessage").innerText = "Database write error. Check Firestore rules.";
+                document.getElementById("returnBtn").style.display = "block";
             }
         }
 
-        function showError(msg) {
-            document.getElementById("statusIcon").innerText = "❌";
-            document.getElementById("statusTitle").innerText = "Verification Failed";
-            document.getElementById("statusTitle").style.color = "#ef4444";
-            document.getElementById("statusMessage").innerText = msg;
-            let btn = document.getElementById("returnBtn");
-            btn.style.display = "block";
-            btn.style.background = "#334155";
-        }
-
-        setTimeout(verifyUserDevice, 1000);
+        setTimeout(verifyUserDevice, 800);
 
         window.closeWindow = function() {
             if (window.Telegram && window.Telegram.WebApp) {

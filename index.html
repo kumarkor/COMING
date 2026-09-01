@@ -3,75 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure OTP Verification</title>
+    <title>Secure Verification</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; position: relative; }
-        .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #f59e0b, #d97706); border-top-left-radius: 20px; border-top-right-radius: 20px; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+        .card { background: rgba(30, 41, 59, 0.9); padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; border-top: 5px solid #38bdf8; backdrop-filter: blur(10px); }
         .icon { font-size: 50px; margin-bottom: 15px; }
         h2 { margin: 0 0 10px 0; font-size: 22px; color: #f8fafc; }
         p { color: #94a3b8; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
         
-        .otp-input { width: 80%; padding: 15px; font-size: 24px; text-align: center; letter-spacing: 10px; border-radius: 10px; border: 2px solid #3b82f6; background: #0f172a; color: #38bdf8; outline: none; margin-bottom: 20px; font-weight: bold; }
+        .otp-input { display: none; width: 80%; padding: 15px; font-size: 24px; text-align: center; letter-spacing: 15px; border-radius: 10px; border: 2px solid #3b82f6; background: #0f172a; color: #38bdf8; outline: none; margin: 0 auto 20px auto; font-weight: bold; transition: 0.3s; }
         .otp-input:focus { border-color: #f59e0b; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
         
-        .btn { background: linear-gradient(90deg, #3b82f6, #2563eb); color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.3s; margin-bottom: 10px; }
+        .btn { background: linear-gradient(90deg, #3b82f6, #2563eb); color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.3s; margin-bottom: 10px; box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); }
         .btn:hover { transform: scale(1.05); }
-        .btn-success { background: linear-gradient(90deg, #10b981, #059669); display: none; }
         
-        #errorMsg { color: #ef4444; font-size: 13px; margin-bottom: 15px; font-weight: bold; min-height: 20px; }
+        #errorMsg { color: #ef4444; font-size: 14px; margin-bottom: 15px; font-weight: bold; min-height: 20px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="icon" id="statusIcon">🔐</div>
-        <h2 id="title">Enter OTP Code</h2>
-        <p id="desc">Please enter the 4-digit code sent to you by the bot.</p>
+        <div class="icon" id="statusIcon">🛡️</div>
+        <h2 id="title">Device Security</h2>
+        <p id="desc">Click below to receive a secure OTP in your Telegram chat.</p>
         
         <input type="number" id="otpBox" class="otp-input" placeholder="0000" maxlength="4" oninput="javascript: if (this.value.length > this.maxLength) this.value = this.value.slice(0, this.maxLength);">
         
         <div id="errorMsg"></div>
         
-        <button class="btn" id="verifyBtn" onclick="verifyOTP()">Verify Device</button>
-        <button class="btn btn-success" id="closeBtn" onclick="closeApp()">✅ Return to Bot</button>
+        <button class="btn" id="sendBtn" onclick="requestOTP()">📩 Get OTP on Telegram</button>
+        <button class="btn" id="verifyBtn" style="display: none; background: linear-gradient(90deg, #f59e0b, #d97706);" onclick="checkOTP()">✅ Verify OTP</button>
+        <button class="btn" id="closeBtn" style="display: none; background: linear-gradient(90deg, #10b981, #059669);" onclick="closeApp()">Return to Bot</button>
     </div>
 
     <script>
         const uid = new URLSearchParams(window.location.search).get('uid');
-        let realOtp = "";
+        const botToken = "8820903723:AAHcsIeGc84J2xaLK8-VCF7grrQXhsciQAw";
+        let generatedOtp = "";
+        let deviceId = localStorage.getItem("bot_secure_device");
 
-        // 1. Fetch the real OTP from Firestore when app opens
-        async function fetchRealOTP() {
+        if (!deviceId) {
+            deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem("bot_secure_device", deviceId);
+        }
+
+        function showError(msg) { document.getElementById("errorMsg").innerText = msg; }
+
+        async function requestOTP() {
             if (!uid) { showError("UID Missing! Open from Bot."); return; }
-            try {
-                let res = await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`);
-                let data = await res.json();
-                if (data && data.fields && data.fields.otp) {
-                    realOtp = data.fields.otp.stringValue;
-                }
-            } catch (e) { showError("Network error connecting to database."); }
-        }
-        fetchRealOTP();
+            document.getElementById("sendBtn").innerText = "⏳ Checking Security...";
+            document.getElementById("sendBtn").disabled = true;
 
-        function showError(msg) {
-            document.getElementById("errorMsg").innerText = msg;
-        }
-
-        async function verifyOTP() {
-            let userOtp = document.getElementById("otpBox").value;
-            if (userOtp.length < 4) { showError("Please enter a valid 4-digit OTP."); return; }
-            if (userOtp !== realOtp) { showError("❌ Incorrect OTP! Try again."); return; }
-
-            document.getElementById("verifyBtn").innerText = "Checking Security...";
-            document.getElementById("verifyBtn").disabled = true;
-
-            // 2. ANTI-CHEAT: 1 Device = 1 User Check
-            let deviceId = localStorage.getItem("bot_secure_device");
-            if (!deviceId) {
-                deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
-                localStorage.setItem("bot_secure_device", deviceId);
-            }
-
+            // 1. ANTI-CHEAT: Check if Device is already used by another UID
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
@@ -95,9 +77,10 @@
                 }
 
                 if (isUsedByOther) {
-                    showError("🚫 MULTIPLE ACCOUNTS DETECTED! Device Banned.");
+                    showError("🚫 MULTIPLE ACCOUNTS DETECTED!\nThis device is banned.");
                     document.getElementById("statusIcon").innerText = "❌";
-                    // Ban logic in Firebase
+                    document.getElementById("sendBtn").style.display = "none";
+                    // Mark as banned in Firebase
                     await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=device_verified`, {
                         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ fields: { device_verified: { booleanValue: false } } })
@@ -105,29 +88,55 @@
                     return;
                 }
 
-                // 3. SUCCESS: Save Verified Status
-                const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=otp`;
+                // 2. Generate and Send OTP via Telegram API
+                generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+                let tgMsg = `🔐 *SECURITY VERIFICATION*\n\nYour OTP Code is: \`${generatedOtp}\`\n\n_Please enter this code in the Web App to verify your device._`;
+                
+                let tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${uid}&text=${encodeURIComponent(tgMsg)}&parse_mode=Markdown`;
+                await fetch(tgUrl);
+
+                // 3. Update UI to enter OTP
+                document.getElementById("statusIcon").innerText = "💬";
+                document.getElementById("title").innerText = "OTP Sent!";
+                document.getElementById("desc").innerText = "Check your Telegram chat and enter the 4-digit code below.";
+                document.getElementById("sendBtn").style.display = "none";
+                document.getElementById("otpBox").style.display = "block";
+                document.getElementById("verifyBtn").style.display = "block";
+                showError("");
+
+            } catch (e) { 
+                showError("Network Error!"); 
+                document.getElementById("sendBtn").innerText = "📩 Get OTP on Telegram"; 
+                document.getElementById("sendBtn").disabled = false; 
+            }
+        }
+
+        async function checkOTP() {
+            let userOtp = document.getElementById("otpBox").value;
+            if (userOtp.length < 4) { showError("Enter 4-digit OTP."); return; }
+            if (userOtp !== generatedOtp) { showError("❌ Incorrect OTP! Try again."); return; }
+
+            document.getElementById("verifyBtn").innerText = "⏳ Saving...";
+            document.getElementById("verifyBtn").disabled = true;
+
+            // 4. Save Verified Status to Firestore
+            const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified`;
+            try {
                 let updateRes = await fetch(firestoreUrl, {
                     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fields: {
-                            deviceId: { stringValue: deviceId },
-                            device_verified: { booleanValue: true },
-                            otp: { stringValue: "USED" } // Expire the OTP
-                        }
-                    })
+                    body: JSON.stringify({ fields: { deviceId: { stringValue: deviceId }, device_verified: { booleanValue: true } } })
                 });
 
                 if (updateRes.ok) {
                     document.getElementById("statusIcon").innerText = "✅";
                     document.getElementById("title").innerText = "Verification Complete!";
-                    document.getElementById("desc").innerText = "Your OTP matched and device is secured.";
-                    document.getElementById("errorMsg").innerText = "";
+                    document.getElementById("desc").innerText = "Your device is secured successfully.";
                     document.getElementById("otpBox").style.display = "none";
                     document.getElementById("verifyBtn").style.display = "none";
                     document.getElementById("closeBtn").style.display = "block";
+                    showError("");
                 }
-            } catch (e) { showError("Database Error. Please retry."); document.getElementById("verifyBtn").disabled = false; document.getElementById("verifyBtn").innerText = "Verify Device"; }
+            } catch (e) { showError("Database Error."); }
         }
 
         function closeApp() { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.close(); }

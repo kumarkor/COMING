@@ -3,159 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Verification</title>
+    <title>Secure OTP Verification</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; position: relative; overflow: hidden; }
-        .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #00f2fe, #4facfe); }
-        .circle { width: 100px; height: 100px; border-radius: 50%; border: 5px solid #38bdf8; display: flex; justify-content: center; align-items: center; font-size: 45px; font-weight: bold; margin: 0 auto 20px auto; color: #38bdf8; box-shadow: 0 0 25px rgba(56, 189, 248, 0.5); transition: all 0.5s ease; }
-        h2 { margin: 0 0 10px 0; font-size: 24px; color: #f8fafc; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; position: relative; }
+        .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #f59e0b, #d97706); border-top-left-radius: 20px; border-top-right-radius: 20px; }
+        .icon { font-size: 50px; margin-bottom: 15px; }
+        h2 { margin: 0 0 10px 0; font-size: 22px; color: #f8fafc; }
         p { color: #94a3b8; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
-        .btn { display: none; background: linear-gradient(90deg, #10b981, #059669); color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transition: 0.3s; }
+        
+        .otp-input { width: 80%; padding: 15px; font-size: 24px; text-align: center; letter-spacing: 10px; border-radius: 10px; border: 2px solid #3b82f6; background: #0f172a; color: #38bdf8; outline: none; margin-bottom: 20px; font-weight: bold; }
+        .otp-input:focus { border-color: #f59e0b; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+        
+        .btn { background: linear-gradient(90deg, #3b82f6, #2563eb); color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.3s; margin-bottom: 10px; }
         .btn:hover { transform: scale(1.05); }
+        .btn-success { background: linear-gradient(90deg, #10b981, #059669); display: none; }
+        
+        #errorMsg { color: #ef4444; font-size: 13px; margin-bottom: 15px; font-weight: bold; min-height: 20px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="circle" id="countdown">5</div>
-        <h2 id="title">Verifying Device...</h2>
-        <p id="desc">Checking device security and preventing multiple accounts...</p>
-        <button class="btn" id="closeBtn" onclick="closeApp()">✅ Return to Bot</button>
+        <div class="icon" id="statusIcon">🔐</div>
+        <h2 id="title">Enter OTP Code</h2>
+        <p id="desc">Please enter the 4-digit code sent to you by the bot.</p>
+        
+        <input type="number" id="otpBox" class="otp-input" placeholder="0000" maxlength="4" oninput="javascript: if (this.value.length > this.maxLength) this.value = this.value.slice(0, this.maxLength);">
+        
+        <div id="errorMsg"></div>
+        
+        <button class="btn" id="verifyBtn" onclick="verifyOTP()">Verify Device</button>
+        <button class="btn btn-success" id="closeBtn" onclick="closeApp()">✅ Return to Bot</button>
     </div>
 
     <script>
-        let apiSuccess = false;
-        let errorMsg = "";
+        const uid = new URLSearchParams(window.location.search).get('uid');
+        let realOtp = "";
 
-        async function runVerification() {
-            const uid = new URLSearchParams(window.location.search).get('uid');
-            if (!uid) { errorMsg = "UID Missing! Open from Bot."; return; }
+        // 1. Fetch the real OTP from Firestore when app opens
+        async function fetchRealOTP() {
+            if (!uid) { showError("UID Missing! Open from Bot."); return; }
+            try {
+                let res = await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`);
+                let data = await res.json();
+                if (data && data.fields && data.fields.otp) {
+                    realOtp = data.fields.otp.stringValue;
+                }
+            } catch (e) { showError("Network error connecting to database."); }
+        }
+        fetchRealOTP();
 
-            // 1. Get or Generate Device ID
-            let deviceId = localStorage.getItem("bot_device_id");
+        function showError(msg) {
+            document.getElementById("errorMsg").innerText = msg;
+        }
+
+        async function verifyOTP() {
+            let userOtp = document.getElementById("otpBox").value;
+            if (userOtp.length < 4) { showError("Please enter a valid 4-digit OTP."); return; }
+            if (userOtp !== realOtp) { showError("❌ Incorrect OTP! Try again."); return; }
+
+            document.getElementById("verifyBtn").innerText = "Checking Security...";
+            document.getElementById("verifyBtn").disabled = true;
+
+            // 2. ANTI-CHEAT: 1 Device = 1 User Check
+            let deviceId = localStorage.getItem("bot_secure_device");
             if (!deviceId) {
                 deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
-                localStorage.setItem("bot_device_id", deviceId);
+                localStorage.setItem("bot_secure_device", deviceId);
             }
 
-            // 2. ANTI-CHEAT: Check if this Device ID is already used by another UID
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
                     from: [{ collectionId: "users" }],
-                    where: {
-                        fieldFilter: {
-                            field: { fieldPath: "deviceId" },
-                            op: "EQUAL",
-                            value: { stringValue: deviceId }
-                        }
-                    }
+                    where: { fieldFilter: { field: { fieldPath: "deviceId" }, op: "EQUAL", value: { stringValue: deviceId } } }
                 }
             };
 
             try {
-                let checkRes = await fetch(queryUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(queryPayload)
-                });
-                
+                let checkRes = await fetch(queryUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(queryPayload) });
                 let checkData = await checkRes.json();
                 let isUsedByOther = false;
                 
-                // Read the database response to see if another account is linked
-                if (checkData && checkData.length > 0 && checkData[0].document) {
+                if (checkData && checkData.length > 0) {
                     for (let item of checkData) {
                         if (item.document && item.document.name) {
-                            let docName = item.document.name;
-                            let existingUid = docName.split('/').pop();
-                            if (existingUid !== uid) {
-                                isUsedByOther = true;
-                                break;
-                            }
+                            let existingUid = item.document.name.split('/').pop();
+                            if (existingUid !== uid) { isUsedByOther = true; break; }
                         }
                     }
                 }
 
                 if (isUsedByOther) {
-                    errorMsg = "Multiple Accounts Detected! This device is banned.";
-                    return; // Stops here, completely blocks the user!
+                    showError("🚫 MULTIPLE ACCOUNTS DETECTED! Device Banned.");
+                    document.getElementById("statusIcon").innerText = "❌";
+                    // Ban logic in Firebase
+                    await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=device_verified`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fields: { device_verified: { booleanValue: false } } })
+                    });
+                    return;
                 }
 
-                // 3. SAFE: Save Verification if the device is clean
-                const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=timestamp`;
-                const payload = {
-                    fields: {
-                        deviceId: { stringValue: deviceId },
-                        device_verified: { booleanValue: true },
-                        timestamp: { timestampValue: new Date().toISOString() }
-                    }
-                };
-
+                // 3. SUCCESS: Save Verified Status
+                const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified&updateMask.fieldPaths=otp`;
                 let updateRes = await fetch(firestoreUrl, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fields: {
+                            deviceId: { stringValue: deviceId },
+                            device_verified: { booleanValue: true },
+                            otp: { stringValue: "USED" } // Expire the OTP
+                        }
+                    })
                 });
 
                 if (updateRes.ok) {
-                    apiSuccess = true;
-                } else {
-                    errorMsg = "Database error. Please try again.";
+                    document.getElementById("statusIcon").innerText = "✅";
+                    document.getElementById("title").innerText = "Verification Complete!";
+                    document.getElementById("desc").innerText = "Your OTP matched and device is secured.";
+                    document.getElementById("errorMsg").innerText = "";
+                    document.getElementById("otpBox").style.display = "none";
+                    document.getElementById("verifyBtn").style.display = "none";
+                    document.getElementById("closeBtn").style.display = "block";
                 }
-
-            } catch (e) {
-                errorMsg = "Network Error!";
-            }
+            } catch (e) { showError("Database Error. Please retry."); document.getElementById("verifyBtn").disabled = false; document.getElementById("verifyBtn").innerText = "Verify Device"; }
         }
 
-        runVerification();
-
-        let timeLeft = 5;
-        let timer = setInterval(() => {
-            timeLeft--;
-            if (timeLeft > 0) {
-                document.getElementById("countdown").innerText = timeLeft;
-            } else {
-                clearInterval(timer);
-                showFinalResult();
-            }
-        }, 1000);
-
-        function showFinalResult() {
-            let circle = document.getElementById("countdown");
-            let title = document.getElementById("title");
-            let desc = document.getElementById("desc");
-            let btn = document.getElementById("closeBtn");
-
-            if (apiSuccess) {
-                circle.innerText = "✔";
-                circle.style.borderColor = "#10b981";
-                circle.style.color = "#10b981";
-                circle.style.boxShadow = "0 0 25px rgba(16, 185, 129, 0.6)";
-                title.innerText = "Verification Successful!";
-                desc.innerText = "Your device has been verified securely. You can now return to the bot.";
-                btn.style.background = "linear-gradient(90deg, #10b981, #059669)";
-            } else {
-                circle.innerText = "✖";
-                circle.style.borderColor = "#ef4444";
-                circle.style.color = "#ef4444";
-                circle.style.boxShadow = "0 0 25px rgba(239, 68, 68, 0.6)";
-                title.innerText = "Verification Failed!";
-                desc.innerText = errorMsg;
-                btn.style.background = "linear-gradient(90deg, #ef4444, #b91c1c)";
-                btn.innerText = "❌ Close Window";
-            }
-            btn.style.display = "block";
-        }
-
-        function closeApp() {
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.close();
-            } else {
-                window.close();
-            }
-        }
+        function closeApp() { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.close(); }
     </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </body>

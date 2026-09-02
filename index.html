@@ -19,7 +19,6 @@
         
         #errorMsg { color: #ef4444; font-size: 14px; margin-bottom: 15px; font-weight: bold; min-height: 20px; }
 
-        /* Admin Panel Style */
         .admin-panel { display: none; background: #334155; padding: 15px; border-radius: 15px; border: 2px dashed #ef4444; width: 90%; max-width: 350px; text-align: center;}
         .admin-btn { background: #ef4444; color: white; border: none; padding: 10px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px;}
         .admin-btn:hover { background: #dc2626; }
@@ -27,16 +26,16 @@
 </head>
 <body>
     
-    <div class="card">
-        <div class="icon" id="statusIcon">🛡️</div>
-        <h2 id="title">Device Security</h2>
-        <p id="desc">Click below to receive a secure OTP in your Telegram chat.</p>
+    <div class="card" id="mainCard">
+        <div class="icon" id="statusIcon">⏳</div>
+        <h2 id="title">Checking Status...</h2>
+        <p id="desc">Please wait while we check your verification status.</p>
         
         <input type="number" id="otpBox" class="otp-input" placeholder="0000" maxlength="4" oninput="javascript: if (this.value.length > this.maxLength) this.value = this.value.slice(0, this.maxLength);">
         
         <div id="errorMsg"></div>
         
-        <button class="btn" id="sendBtn" onclick="requestOTP()">📩 Get OTP on Telegram</button>
+        <button class="btn" id="sendBtn" style="display: none;" onclick="requestOTP()">📩 Get OTP on Telegram</button>
         <button class="btn" id="verifyBtn" style="display: none; background: linear-gradient(90deg, #f59e0b, #d97706);" onclick="checkOTP()">✅ Verify OTP</button>
         <button class="btn" id="closeBtn" style="display: none; background: linear-gradient(90deg, #10b981, #059669);" onclick="closeApp()">Return to Bot</button>
     </div>
@@ -48,7 +47,7 @@
 
     <script>
         const uid = new URLSearchParams(window.location.search).get('uid');
-        const adminId = "7335163273"; // Tuza Admin ID
+        const adminId = "7335163273"; 
         const botToken = "8820903723:AAHcsIeGc84J2xaLK8-VCF7grrQXhsciQAw";
         let generatedOtp = "";
         let deviceId = localStorage.getItem("bot_secure_device");
@@ -58,19 +57,50 @@
             localStorage.setItem("bot_secure_device", deviceId);
         }
 
-        // Admin check: Show admin panel if UID matches
         if (uid === adminId) {
             document.getElementById("adminPanel").style.display = "block";
         }
 
         function showError(msg) { document.getElementById("errorMsg").innerText = msg; }
 
+        // 🚀 Auto-Check Verification Status when app opens!
+        async function checkInitialStatus() {
+            if (!uid) { 
+                showError("UID Missing!"); 
+                return; 
+            }
+            try {
+                let res = await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`);
+                let data = await res.json();
+                
+                if (data && data.fields && data.fields.device_verified && data.fields.device_verified.booleanValue === true) {
+                    // IF ALREADY VERIFIED -> Show Success Screen instantly!
+                    document.getElementById("statusIcon").innerText = "✅";
+                    document.getElementById("title").innerText = "Already Verified!";
+                    document.getElementById("desc").innerText = "Your account and device are already secured. You don't need to verify again.";
+                    document.getElementById("closeBtn").style.display = "block";
+                } else {
+                    // IF NOT VERIFIED -> Show OTP Request Screen
+                    document.getElementById("statusIcon").innerText = "🛡️";
+                    document.getElementById("title").innerText = "Device Security";
+                    document.getElementById("desc").innerText = "Click below to receive a secure OTP in your Telegram chat.";
+                    document.getElementById("sendBtn").style.display = "block";
+                }
+            } catch (e) {
+                // On error, show normal verification screen just in case
+                document.getElementById("statusIcon").innerText = "🛡️";
+                document.getElementById("title").innerText = "Device Security";
+                document.getElementById("desc").innerText = "Click below to receive a secure OTP.";
+                document.getElementById("sendBtn").style.display = "block";
+            }
+        }
+        checkInitialStatus();
+
         async function requestOTP() {
-            if (!uid) { showError("UID Missing! Open from Bot."); return; }
             document.getElementById("sendBtn").innerText = "⏳ Checking Security...";
             document.getElementById("sendBtn").disabled = true;
 
-            // ANTI-CHEAT: Check 1 Device = 1 User
+            // ANTI-CHEAT: 1 Device = 1 User Check
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
@@ -100,14 +130,12 @@
                     return;
                 }
 
-                // Generate and Send OTP
                 generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
                 let tgMsg = `🔐 *SECURITY VERIFICATION*\n\nYour OTP Code is: \`${generatedOtp}\`\n\n_Please enter this code in the Web App to verify your device._`;
                 
                 let tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${uid}&text=${encodeURIComponent(tgMsg)}&parse_mode=Markdown`;
                 await fetch(tgUrl);
 
-                // Update UI
                 document.getElementById("statusIcon").innerText = "💬";
                 document.getElementById("title").innerText = "OTP Sent!";
                 document.getElementById("desc").innerText = "Check your Telegram chat and enter the 4-digit code below.";
@@ -131,7 +159,6 @@
             document.getElementById("verifyBtn").innerText = "⏳ Saving...";
             document.getElementById("verifyBtn").disabled = true;
 
-            // Save Verified Status
             const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified`;
             try {
                 let updateRes = await fetch(firestoreUrl, {
@@ -151,24 +178,17 @@
             } catch (e) { showError("Database Error."); }
         }
 
-        // ADMIN FUNCTION: DELETE FIREBASE DATA & LOCAL STORAGE
         async function resetAdminData() {
-            let confirmDelete = confirm("Are you sure you want to delete your verification data to test again?");
+            let confirmDelete = confirm("Are you sure you want to reset your verification data?");
             if (!confirmDelete) return;
 
             try {
-                // Delete user from Firebase via Website directly (Works 100%!)
                 let deleteUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`;
                 await fetch(deleteUrl, { method: 'DELETE' });
-
-                // Remove Local Storage Device ID
                 localStorage.removeItem("bot_secure_device");
-
                 alert("✅ Data Deleted Successfully! Please close this app, go to bot and send /start to test again.");
                 closeApp();
-            } catch (e) {
-                alert("Error deleting data!");
-            }
+            } catch (e) { alert("Error deleting data!"); }
         }
 
         function closeApp() { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.close(); }

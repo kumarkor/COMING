@@ -50,8 +50,9 @@
         const adminId = "7335163273"; 
         const botToken = "8820903723:AAHcsIeGc84J2xaLK8-VCF7grrQXhsciQAw";
         let generatedOtp = "";
+        
+        // 1. Get or Create Device ID (Never deleted now!)
         let deviceId = localStorage.getItem("bot_secure_device");
-
         if (!deviceId) {
             deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
             localStorage.setItem("bot_secure_device", deviceId);
@@ -63,31 +64,24 @@
 
         function showError(msg) { document.getElementById("errorMsg").innerText = msg; }
 
-        // 🚀 Auto-Check Verification Status when app opens!
         async function checkInitialStatus() {
-            if (!uid) { 
-                showError("UID Missing!"); 
-                return; 
-            }
+            if (!uid) { showError("UID Missing!"); return; }
             try {
                 let res = await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`);
                 let data = await res.json();
                 
                 if (data && data.fields && data.fields.device_verified && data.fields.device_verified.booleanValue === true) {
-                    // IF ALREADY VERIFIED -> Show Success Screen instantly!
                     document.getElementById("statusIcon").innerText = "✅";
                     document.getElementById("title").innerText = "Already Verified!";
-                    document.getElementById("desc").innerText = "Your account and device are already secured. You don't need to verify again.";
+                    document.getElementById("desc").innerText = "Your account and device are already secured.";
                     document.getElementById("closeBtn").style.display = "block";
                 } else {
-                    // IF NOT VERIFIED -> Show OTP Request Screen
                     document.getElementById("statusIcon").innerText = "🛡️";
                     document.getElementById("title").innerText = "Device Security";
                     document.getElementById("desc").innerText = "Click below to receive a secure OTP in your Telegram chat.";
                     document.getElementById("sendBtn").style.display = "block";
                 }
             } catch (e) {
-                // On error, show normal verification screen just in case
                 document.getElementById("statusIcon").innerText = "🛡️";
                 document.getElementById("title").innerText = "Device Security";
                 document.getElementById("desc").innerText = "Click below to receive a secure OTP.";
@@ -100,7 +94,7 @@
             document.getElementById("sendBtn").innerText = "⏳ Checking Security...";
             document.getElementById("sendBtn").disabled = true;
 
-            // ANTI-CHEAT: 1 Device = 1 User Check
+            // 2. STRICT ANTI-CHEAT CHECK
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
@@ -127,6 +121,12 @@
                     showError("🚫 MULTIPLE ACCOUNTS DETECTED!\nThis device is banned.");
                     document.getElementById("statusIcon").innerText = "❌";
                     document.getElementById("sendBtn").style.display = "none";
+                    
+                    // Auto-Ban in Firebase
+                    await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=device_verified`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fields: { device_verified: { booleanValue: false } } })
+                    });
                     return;
                 }
 
@@ -178,15 +178,17 @@
             } catch (e) { showError("Database Error."); }
         }
 
+        // 3. FIXED RESET ADMIN FUNCTION
         async function resetAdminData() {
-            let confirmDelete = confirm("Are you sure you want to reset your verification data?");
+            let confirmDelete = confirm("Are you sure you want to reset your Firebase status?");
             if (!confirmDelete) return;
 
             try {
+                // Delete user from Firebase ONLY. Device ID is NOT deleted.
                 let deleteUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`;
                 await fetch(deleteUrl, { method: 'DELETE' });
-                localStorage.removeItem("bot_secure_device");
-                alert("✅ Data Deleted Successfully! Please close this app, go to bot and send /start to test again.");
+                
+                alert("✅ Data Deleted! Mobile Device ID is kept safe for Anti-Cheat. Send /start in bot.");
                 closeApp();
             } catch (e) { alert("Error deleting data!"); }
         }

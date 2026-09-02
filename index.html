@@ -22,6 +22,8 @@
         .admin-panel { display: none; background: #334155; padding: 15px; border-radius: 15px; border: 2px dashed #ef4444; width: 90%; max-width: 350px; text-align: center;}
         .admin-btn { background: #ef4444; color: white; border: none; padding: 10px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px;}
         .admin-btn:hover { background: #dc2626; }
+        .danger-btn { background: #7f1d1d; border: 1px solid #f87171;}
+        .danger-btn:hover { background: #991b1b;}
     </style>
 </head>
 <body>
@@ -40,9 +42,11 @@
         <button class="btn" id="closeBtn" style="display: none; background: linear-gradient(90deg, #10b981, #059669);" onclick="closeApp()">Return to Bot</button>
     </div>
 
+    <!-- Admin Panel -->
     <div class="admin-panel" id="adminPanel">
-        <h3 style="margin: 0; color: #f87171; font-size: 16px;">🛠️ Admin Controls</h3>
-        <button class="admin-btn" onclick="resetAdminData()">🗑️ Reset My Data (For Testing)</button>
+        <h3 style="margin: 0; color: #f87171; font-size: 16px;">🛠️ Admin Master Controls</h3>
+        <button class="admin-btn" onclick="resetAdminData()">🗑️ Reset My Data Only</button>
+        <button class="admin-btn danger-btn" onclick="wipeEntireDatabase()">☢️ DELETE ALL USERS DATA</button>
     </div>
 
     <script>
@@ -51,7 +55,6 @@
         const botToken = "8820903723:AAHcsIeGc84J2xaLK8-VCF7grrQXhsciQAw";
         let generatedOtp = "";
         
-        // 1. Get or Create Device ID (Never deleted now!)
         let deviceId = localStorage.getItem("bot_secure_device");
         if (!deviceId) {
             deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
@@ -94,7 +97,6 @@
             document.getElementById("sendBtn").innerText = "⏳ Checking Security...";
             document.getElementById("sendBtn").disabled = true;
 
-            // 2. STRICT ANTI-CHEAT CHECK
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
@@ -122,7 +124,6 @@
                     document.getElementById("statusIcon").innerText = "❌";
                     document.getElementById("sendBtn").style.display = "none";
                     
-                    // Auto-Ban in Firebase
                     await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=device_verified`, {
                         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ fields: { device_verified: { booleanValue: false } } })
@@ -178,17 +179,42 @@
             } catch (e) { showError("Database Error."); }
         }
 
-        // 3. FIXED RESET ADMIN FUNCTION
-        async function resetAdminData() {
-            let confirmDelete = confirm("Are you sure you want to reset your Firebase status?");
-            if (!confirmDelete) return;
+        // --- NEW MASTER FUNCTION: WIPE ENTIRE DATABASE ---
+        async function wipeEntireDatabase() {
+            let confirmWipe = confirm("⚠️ EXTREME DANGER! Are you 100% sure you want to DELETE ALL USERS from the database? This cannot be undone!");
+            if (!confirmWipe) return;
 
+            document.getElementById("title").innerText = "Wiping Database...";
+            document.getElementById("statusIcon").innerText = "⏳";
+            
             try {
-                // Delete user from Firebase ONLY. Device ID is NOT deleted.
+                // 1. Fetch all documents in the 'users' collection
+                let listUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users`;
+                let res = await fetch(listUrl);
+                let data = await res.json();
+
+                // 2. Loop through and delete each user document
+                if (data.documents && data.documents.length > 0) {
+                    for (let doc of data.documents) {
+                        let deleteUrl = `https://firestore.googleapis.com/v1/${doc.name}`;
+                        await fetch(deleteUrl, { method: 'DELETE' });
+                    }
+                }
+
+                alert("✅ SUCCESS! Every single user's data has been wiped clean from Firebase. You can now test from any ID fresh!");
+                closeApp();
+            } catch (e) {
+                alert("❌ Error wiping database! Check network.");
+            }
+        }
+
+        async function resetAdminData() {
+            let confirmDelete = confirm("Are you sure you want to reset ONLY YOUR verification data?");
+            if (!confirmDelete) return;
+            try {
                 let deleteUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`;
                 await fetch(deleteUrl, { method: 'DELETE' });
-                
-                alert("✅ Data Deleted! Mobile Device ID is kept safe for Anti-Cheat. Send /start in bot.");
+                alert("✅ Your Data Deleted! Mobile Device ID is kept safe. Send /start in bot.");
                 closeApp();
             } catch (e) { alert("Error deleting data!"); }
         }

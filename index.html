@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Verification</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: rgba(30, 41, 59, 0.9); padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; border-top: 5px solid #38bdf8; backdrop-filter: blur(10px); }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; flex-direction: column;}
+        .card { background: rgba(30, 41, 59, 0.9); padding: 40px 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); text-align: center; width: 90%; max-width: 350px; border-top: 5px solid #38bdf8; backdrop-filter: blur(10px); position: relative; margin-bottom: 20px;}
         .icon { font-size: 50px; margin-bottom: 15px; }
         h2 { margin: 0 0 10px 0; font-size: 22px; color: #f8fafc; }
         p { color: #94a3b8; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
@@ -18,9 +18,15 @@
         .btn:hover { transform: scale(1.05); }
         
         #errorMsg { color: #ef4444; font-size: 14px; margin-bottom: 15px; font-weight: bold; min-height: 20px; }
+
+        /* Admin Panel Style */
+        .admin-panel { display: none; background: #334155; padding: 15px; border-radius: 15px; border: 2px dashed #ef4444; width: 90%; max-width: 350px; text-align: center;}
+        .admin-btn { background: #ef4444; color: white; border: none; padding: 10px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px;}
+        .admin-btn:hover { background: #dc2626; }
     </style>
 </head>
 <body>
+    
     <div class="card">
         <div class="icon" id="statusIcon">🛡️</div>
         <h2 id="title">Device Security</h2>
@@ -35,8 +41,14 @@
         <button class="btn" id="closeBtn" style="display: none; background: linear-gradient(90deg, #10b981, #059669);" onclick="closeApp()">Return to Bot</button>
     </div>
 
+    <div class="admin-panel" id="adminPanel">
+        <h3 style="margin: 0; color: #f87171; font-size: 16px;">🛠️ Admin Controls</h3>
+        <button class="admin-btn" onclick="resetAdminData()">🗑️ Reset My Data (For Testing)</button>
+    </div>
+
     <script>
         const uid = new URLSearchParams(window.location.search).get('uid');
+        const adminId = "7335163273"; // Tuza Admin ID
         const botToken = "8820903723:AAHcsIeGc84J2xaLK8-VCF7grrQXhsciQAw";
         let generatedOtp = "";
         let deviceId = localStorage.getItem("bot_secure_device");
@@ -46,6 +58,11 @@
             localStorage.setItem("bot_secure_device", deviceId);
         }
 
+        // Admin check: Show admin panel if UID matches
+        if (uid === adminId) {
+            document.getElementById("adminPanel").style.display = "block";
+        }
+
         function showError(msg) { document.getElementById("errorMsg").innerText = msg; }
 
         async function requestOTP() {
@@ -53,7 +70,7 @@
             document.getElementById("sendBtn").innerText = "⏳ Checking Security...";
             document.getElementById("sendBtn").disabled = true;
 
-            // 1. ANTI-CHEAT: Check if Device is already used by another UID
+            // ANTI-CHEAT: Check 1 Device = 1 User
             const queryUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents:runQuery`;
             const queryPayload = {
                 structuredQuery: {
@@ -80,22 +97,17 @@
                     showError("🚫 MULTIPLE ACCOUNTS DETECTED!\nThis device is banned.");
                     document.getElementById("statusIcon").innerText = "❌";
                     document.getElementById("sendBtn").style.display = "none";
-                    // Mark as banned in Firebase
-                    await fetch(`https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=device_verified`, {
-                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fields: { device_verified: { booleanValue: false } } })
-                    });
                     return;
                 }
 
-                // 2. Generate and Send OTP via Telegram API
+                // Generate and Send OTP
                 generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
                 let tgMsg = `🔐 *SECURITY VERIFICATION*\n\nYour OTP Code is: \`${generatedOtp}\`\n\n_Please enter this code in the Web App to verify your device._`;
                 
                 let tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${uid}&text=${encodeURIComponent(tgMsg)}&parse_mode=Markdown`;
                 await fetch(tgUrl);
 
-                // 3. Update UI to enter OTP
+                // Update UI
                 document.getElementById("statusIcon").innerText = "💬";
                 document.getElementById("title").innerText = "OTP Sent!";
                 document.getElementById("desc").innerText = "Check your Telegram chat and enter the 4-digit code below.";
@@ -119,7 +131,7 @@
             document.getElementById("verifyBtn").innerText = "⏳ Saving...";
             document.getElementById("verifyBtn").disabled = true;
 
-            // 4. Save Verified Status to Firestore
+            // Save Verified Status
             const firestoreUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=deviceId&updateMask.fieldPaths=device_verified`;
             try {
                 let updateRes = await fetch(firestoreUrl, {
@@ -139,8 +151,27 @@
             } catch (e) { showError("Database Error."); }
         }
 
+        // ADMIN FUNCTION: DELETE FIREBASE DATA & LOCAL STORAGE
+        async function resetAdminData() {
+            let confirmDelete = confirm("Are you sure you want to delete your verification data to test again?");
+            if (!confirmDelete) return;
+
+            try {
+                // Delete user from Firebase via Website directly (Works 100%!)
+                let deleteUrl = `https://firestore.googleapis.com/v1/projects/coming-886f7/databases/(default)/documents/users/${uid}`;
+                await fetch(deleteUrl, { method: 'DELETE' });
+
+                // Remove Local Storage Device ID
+                localStorage.removeItem("bot_secure_device");
+
+                alert("✅ Data Deleted Successfully! Please close this app, go to bot and send /start to test again.");
+                closeApp();
+            } catch (e) {
+                alert("Error deleting data!");
+            }
+        }
+
         function closeApp() { if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.close(); }
     </script>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </body>
 </html>
